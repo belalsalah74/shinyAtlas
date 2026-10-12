@@ -2,7 +2,7 @@
 
 A split-file frontend for inspecting Pokémon GO spawn records from a mapper. Files: `index.html`, `styles.css`, `app.js`. `server.mjs` is a no-dependency local server and API proxy.
 
-**The page retrieves spawn data; it is not yet an account-specific shiny predictor.** The complete formula was not found in a publicly verifiable implementation, so the page does not invent shiny results.
+**The page retrieves spawn data and includes a local account-specific shiny-roll predictor.** The predictor follows a public reverse-engineered SHA-1 + Java `Random` implementation and is tested against published reference vectors. It still requires an internal game Player ID and a verified numeric encounter ID; a 12-digit Friend Code cannot be used directly.
 
 ## Data sources
 
@@ -48,10 +48,27 @@ Upload a file exported from a mapper. Supported JSON envelopes include an array 
 
 Requires Node.js 18+ (uses native `fetch`). From this directory, run `node server.mjs`; the page will be served at `http://127.0.0.1:8787`.
 
+## Account-specific prediction
+
+`shiny-roll.js` implements the following documented reverse-engineered flow entirely in the browser:
+
+1. Convert the encounter ID to an unsigned 64-bit integer and serialize it as eight little-endian bytes.
+2. Append the internal Player ID as UTF-8.
+3. SHA-1 the concatenated bytes; read the first eight digest bytes as a little-endian integer, XOR with Java's `Random` multiplier and mask to 48 bits.
+4. Perform the first Java LCG update and compare the resulting 24-bit draw against `ceil(2^24 / odds)`.
+
+Reference implementation: https://github.com/rubendgpedrosa/Poliswag/blob/main/modules/shiny_roll.py
+Reference vectors / cross-checks: https://github.com/rubendgpedrosa/Poliswag/blob/main/tests/modules/test_shiny_roll.py
+Golbat project: https://github.com/UnownHash/Golbat
+
+Run `node test-shiny-roll.mjs` to test the browser implementation against the reference vectors. It requires Node.js 18+.
+
 ## Limitations
 
-1. The iFlowGo integration is based on a recent public client but its live availability could not be tested here.
+1. The iFlowGo integration is based on a recent public client but its live availability could not be tested from this environment.
 2. Golbat only returns what its own configured scanner has already collected.
-3. The current iFlowGo integration yields a source `id` but does not establish that it is an encounter ID. This matters for the proposed prediction formula.
-4. A verified account-specific shiny formula/reference implementation is still missing from the public evidence located during research. The page does not mark spawns shiny based on ordinary map `shiny` flags.
-5. Pokémon GO and its services are third-party products. Use only data sources and tools you are authorized to access.
+3. iFlowGo's plain `id` is treated as a source spawn key rather than an encounter ID, so those rows are not formula-scored unless an explicit `encounter_id` is also present.
+4. **Friend-Code linking is not implemented.** The internal game Player ID is a different identifier and must be resolved through a verified linking method first. The page neither sends the ID to a server nor submits a Friend Code anywhere.
+5. The default shiny odds are 1/512. Set the denominator to the applicable odds for the species/encounter source/event; the app does not discover event rates automatically.
+6. The roll predicts the random shiny check; it does not yet gate predictions by the current shiny-release status of each species/form/costume. Treat results as candidate predictions until eligibility is checked.
+7. Pokémon GO and its services are third-party products. Use only data sources and tools you are authorized to access.

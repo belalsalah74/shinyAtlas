@@ -5,7 +5,8 @@
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
   const form = $('#search-form');
-  const trainerCodeInput = $('#trainer-code');
+  const playerIdInput = $('#player-id');
+  const shinyOddsInput = $('#shiny-odds');
   const latitudeInput = $('#latitude');
   const longitudeInput = $('#longitude');
   const radiusInput = $('#radius');
@@ -66,11 +67,17 @@
     const name = firstValue(row, ['pokemon_name', 'species_name', 'name', 'display_name']);
     const expiry = firstValue(row, ['expire_timestamp', 'expiration_timestamp_ms', 'expiration_time', 'despawn_time', 'expires_at', 'expiry']);
 
+    const explicitEncounterId = firstValue(row, ['encounter_id', 'encounterid']);
+    // Plain `id` is only treated as an encounter ID when the selected source
+    // has a documented contract for it (e.g. Golbat). For other feeds it may
+    // only be a provider's own record/spawn key.
+    const encounterId = explicitEncounterId ?? (row.__encounter_id_verified ? firstValue(row, ['id']) : undefined);
     return {
       name: name ? String(name) : `Pokémon ${speciesId ?? 'unknown'}`,
       pokemonId: speciesId,
-      encounterId: firstValue(row, ['encounter_id', 'encounterid', 'id']),
-      spawnId: firstValue(row, ['spawn_id', 'spawnpoint_id', 'spawn_point_id', 'spawnpointid']),
+      encounterId,
+      encounterIdVerified: encounterId !== undefined && encounterId !== null && String(encounterId).trim() !== '',
+      spawnId: firstValue(row, ['spawn_id', 'spawnpoint_id', 'spawn_point_id', 'spawnpointid', 'id']),
       latitude: latitude,
       longitude: longitude,
       expiresAt: expiry,
@@ -78,6 +85,8 @@
       iv: firstValue(row, ['iv', 'iv_percent', 'individual_value']),
       sourceShiny: firstValue(row, ['shiny']),
       predictedShiny: firstValue(row, ['predicted_shiny', 'is_shiny_for_trainer', 'shiny_for_account', 'account_shiny']),
+      computedShiny: undefined,
+      predictionState: '',
       raw: row
     };
   }
@@ -251,16 +260,20 @@
           // Community integration code uses iFlowGo's `id` as its spawn identifier;
           // do not mislabel it as the game's encounter ID.
           if (!row || typeof row !== 'object') return row;
+          const hasEncounterId = row.encounter_id !== undefined || row.encounterId !== undefined;
           return {
             ...row,
             spawn_id: row.spawn_id ?? row.spawnId ?? row.id,
             encounter_id: row.encounter_id ?? row.encounterId,
+            __encounter_id_verified: Boolean(hasEncounterId),
             // iFlowGo's public client treats `id` as its source spawn key, not an encounter ID.
             id: undefined,
             name: row.pokemon_name ?? row.name ?? row.species_name
           };
         })
-      : rows;
+      : source === 'golbat'
+        ? rows.map((row) => row && typeof row === 'object' ? { ...row, __encounter_id_verified: true } : row)
+        : rows;
     const normalized = sourceRows
       .filter((row) => row && typeof row === 'object' && !Array.isArray(row))
       .map(normalizeRecord)
@@ -289,11 +302,49 @@
   }
 
   function getPredictionLabel(record) {
+    if (record.predictionState === 'computed') {
+      return record.computedShiny
+        ? `RNG roll: shiny if eligible · 1/${record.shinyOdds} (draw ${record.shinyDraw.toFixed(6)})`
+        : `RNG roll: not shiny · 1/${record.shinyOdds} (draw ${record.shinyDraw.toFixed(6)})`;
+    }
     if (record.predictedShiny !== undefined) {
       if (record.predictedShiny === true || record.predictedShiny === 1 || String(record.predictedShiny).toLowerCase() === 'true') return 'Feed says shiny for account';
       if (record.predictedShiny === false || record.predictedShiny === 0 || String(record.predictedShiny).toLowerCase() === 'false') return 'Feed says not shiny';
     }
+    if (record.predictionState === 'no-encounter-id') return 'No verified encounter ID';
+    if (record.predictionState === 'bad-encounter-id') return 'Invalid encounter ID';
+    if (record.predictionState === 'needs-player-id') return 'Internal Player ID required';
     return 'Prediction unavailable';
+  }
+
+  async function applyFormulaPredictions(records) {
+    const rawPlayerId = playerIdInput.value.trim();
+    const playerId = rawPlayerId ? ShinyRoll.normalizePlayerId(rawPlayerId) : null;
+    const odds = Number(shinyOddsInput.value);
+    if (rawPlayerId && !playerId) {
+      throw new Error('Internal Player ID format is invalid. A Friend Code is not accepted by the formula.');
+    }
+    if (!Number.isInteger(odds) || odds < 1 || odds > 10000) {
+      throw new Error('Shiny odds denominator must be a whole number from 1 to 10000.');
+    }
+
+    return Promise.all(records.map(async (record) => {
+      if (!playerId) {
+        return { ...record, predictionState: record.encounterIdVerified ? 'needs-player-id' : 'no-encounter-id' };
+      }
+      if (!record.encounterIdVerified) return { ...record, predictionState: 'no-encounter-id' };
+      const parsedEncounterId = ShinyRoll.parseEncounterId(record.encounterId);
+      if (parsedEncounterId === null) return { ...record, predictionState: 'bad-encounter-id' };
+      const result = await ShinyRoll.predict(parsedEncounterId, playerId, odds);
+      return {
+        ...record,
+        computedShiny: result.isShiny,
+        shinyOdds: odds,
+        shinyDraw: result.draw,
+        shinyRoll24: result.roll24,
+        predictionState: 'computed'
+      };
+    }));
   }
 
   function renderRecord(record) {
@@ -308,17 +359,21 @@
     const sourceFlag = record.sourceShiny !== undefined
       ? `<div class="record-meta">Source shiny field: ${escapeHtml(record.sourceShiny)}</div>`
       : '';
+    const predictionClass = record.predictionState === 'computed'
+      ? (record.computedShiny ? ' predicted-shiny' : ' predicted-not-shiny')
+      : ' needs-data';
     return `<article class="record">
       <div>
         <h3 class="record-title">${escapeHtml(record.name)}</h3>
         <div class="record-meta">Pokémon ID: ${escapeHtml(record.pokemonId ?? '—')}${cp}${iv}</div>
-        <div class="record-meta">Encounter ID: ${escapeHtml(encounter)}</div>
+        <div class="record-meta">Encounter ID: ${escapeHtml(encounter)}${record.encounterIdVerified ? ' · verified source field' : ' · unverified/missing'}</div>
         <div class="record-meta">Spawn/source ID: ${escapeHtml(spawn)}</div>
         <div class="record-meta">${escapeHtml(coordinates)} · ${escapeHtml(formatExpiry(record.expiresAt))}</div>
+        ${record.predictionState === 'computed' ? `<div class="record-meta">24-bit roll: ${record.shinyRoll24} / 16777215 · cutoff: ${Math.ceil(16777216 / record.shinyOdds) - 1}</div>` : ''}
         ${sourceFlag}
         <div class="record-links"><a href="${mapHref}" target="_blank" rel="noopener noreferrer">Open map ↗</a><a href="#" class="copy-coords" data-coords="${escapeHtml(`${latitude}, ${longitude}`)}">Copy coordinates</a></div>
       </div>
-      <span class="record-status">${escapeHtml(getPredictionLabel(record))}</span>
+      <span class="record-status${predictionClass}">${escapeHtml(getPredictionLabel(record))}</span>
     </article>`;
   }
 
@@ -337,7 +392,8 @@
     } else {
       renderMoreRecords();
     }
-    resultsNote.textContent = `Radius: ${area.radius} km around ${area.latitude.toFixed(5)}, ${area.longitude.toFixed(5)}. Records are filtered to this circle and sorted by expiry. The account-specific shiny formula is not enabled, so no shiny status is inferred.`;
+    const predictedCount = records.filter((record) => record.predictionState === 'computed').length;
+    resultsNote.textContent = `Radius: ${area.radius} km around ${area.latitude.toFixed(5)}, ${area.longitude.toFixed(5)}. Records are sorted by expiry. Formula predictions computed: ${predictedCount}/${records.length}. Only verified encounter IDs are rolled; missing IDs are not guessed. Species/form shiny-release eligibility is not yet checked, so a positive is conditional on the form being shiny-eligible.`;
     resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -353,8 +409,10 @@
     event?.preventDefault();
     try {
       const area = validateSearchArea();
-      const trainerCode = trainerCodeInput.value.replace(/\D/g, '');
-      if (trainerCode && !/^\d{12}$/.test(trainerCode)) throw new Error('Trainer Code must contain exactly 12 digits, or be left blank.');
+      const rawPlayerId = playerIdInput.value.trim();
+      if (rawPlayerId && !ShinyRoll.normalizePlayerId(rawPlayerId)) throw new Error('Internal Player ID format is invalid. A 12-digit Friend Code is not accepted by the formula.');
+      const odds = Number(shinyOddsInput.value);
+      if (!Number.isInteger(odds) || odds < 1 || odds > 10000) throw new Error('Shiny odds denominator must be a whole number from 1 to 10000.');
 
       setStatus('Querying the selected data source…');
       searchButton.disabled = true;
@@ -367,15 +425,21 @@
       else result = rowsFromLocalFile();
 
       const records = normalizeRows(result.rows, area, sourceMode);
-      renderResults(records, result.label, area);
-      setStatus(`Received ${result.rows.length} source row(s); ${records.length} matched your filters. Trainer Code was not transmitted.`, 'success');
+      const predictedRecords = await applyFormulaPredictions(records);
+      renderResults(predictedRecords, result.label, area);
+      const predictedCount = predictedRecords.filter((record) => record.predictionState === 'computed').length;
+      if (playerIdInput.value.trim()) {
+        setStatus(`Received ${result.rows.length} source row(s); ${records.length} matched. Formula predictions computed for ${predictedCount} row(s). Player ID stayed in your browser.`, 'success');
+      } else {
+        setStatus(`Received ${result.rows.length} source row(s); ${records.length} matched. Enter the internal game Player ID to calculate account-specific results.`, 'success');
+      }
     } catch (error) {
       setStatus(error.message || 'Search failed.', 'error');
       resultsSection.hidden = false;
       resultsTitle.textContent = 'Unable to search';
       resultCount.textContent = '';
       resultSource.textContent = sourceMode === 'iflowgo' ? 'iFlowGo' : sourceMode === 'golbat' ? 'Golbat' : sourceMode === 'feed' ? 'JSON feed' : 'Local file';
-      resultsNote.textContent = 'No prediction was attempted. Review the error and connection settings.';
+      resultsNote.textContent = 'Prediction was not completed. Review the error and connection settings.';
       recordsList.innerHTML = `<div class="empty-state"><strong>Search did not complete</strong>${escapeHtml(error.message || 'Unknown error.')}</div>`;
       paginationRow.hidden = true;
     } finally {
@@ -395,9 +459,8 @@
     $(`#pane-${mode}`).classList.remove('hidden');
   }
 
-  trainerCodeInput.addEventListener('input', () => {
-    const digits = trainerCodeInput.value.replace(/\D/g, '').slice(0, 12);
-    trainerCodeInput.value = digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
+  playerIdInput.addEventListener('input', () => {
+    playerIdInput.value = playerIdInput.value.trim().toLowerCase();
   });
 
   $$('.source-tab').forEach((button) => button.addEventListener('click', () => setSource(button.dataset.source)));

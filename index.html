@@ -7,6 +7,7 @@
   <meta name="theme-color" content="#0a0d12">
   <title>Shiny Atlas — Mapper Search</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="shiny-roll.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
@@ -30,16 +31,21 @@
         <div class="panel-heading">
           <div>
             <h2 id="search-heading">Search spawn records</h2>
-            <p class="muted">Your Trainer Code stays in this page. It is not sent to a mapper.</p>
+            <p class="muted">The formula runs locally. No Player ID is sent to a mapper or server.</p>
           </div>
           <span class="mini-tag">No game login</span>
         </div>
 
         <form id="search-form">
           <div class="field-group">
-            <label for="trainer-code">Trainer Code <span class="optional">optional for data inspection</span></label>
-            <input id="trainer-code" name="trainer-code" class="text-input" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="1234 5678 9012" aria-describedby="trainer-help">
-            <p class="field-help" id="trainer-help">Kept in memory only. Account-specific shiny calculation is not enabled because a verified public implementation has not been found.</p>
+            <label for="player-id">Internal game Player ID <span class="optional">optional for feed-only search</span></label>
+            <input id="player-id" name="player-id" class="text-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="16-char hex or 15–24 digit ID" aria-describedby="player-id-help">
+            <p class="field-help" id="player-id-help">This is not your 12-digit Friend Code. The internal ID must first be resolved through a verified account-linking flow; this build does not link codes automatically. If entered, it stays in your browser and is used only for local calculations.</p>
+          </div>
+          <div class="field-group">
+            <label for="shiny-odds">Shiny odds denominator</label>
+            <input id="shiny-odds" name="shiny-odds" class="text-input" type="number" min="1" max="10000" step="1" value="512" required>
+            <p class="field-help">Default 512 means 1 in 512. Set the denominator for the current species and encounter source/event; the app cannot infer event-specific odds yet.</p>
           </div>
 
           <div class="section-rule"><span>DATA SOURCE</span></div>
@@ -52,7 +58,7 @@
 
           <div class="source-pane" id="pane-iflowgo">
             <div class="source-status"><span class="status-dot"></span><div><strong>iFlowGo nearby feed</strong><p>A third-party endpoint documented in a recent public Pokémon GO coordinates bot. The local server calls it so browser CORS does not block the request.</p></div></div>
-            <p class="callout">This source has been reported to return species, coordinates, expiry and a record ID. That ID is not verified to be the game's encounter ID, so it may not provide every input a shiny formula needs. Availability and provider rules can change.</p>
+            <p class="callout">This source is documented as returning species, coordinates, expiry and a source record ID. That ID is not verified to be the game encounter ID, so it is not used for formula prediction unless an explicit encounter_id is also returned. Availability and provider rules can change.</p>
           </div>
 
           <div class="source-pane hidden" id="pane-golbat">
@@ -126,9 +132,9 @@
         </div>
         <div class="fact-block">
           <span class="fact-number">04</span>
-          <div><h3>Prediction is separate</h3><p>The feed must contain the right identifiers, and the account-specific formula still needs independent verification. This page never invents shiny status.</p></div>
+          <div><h3>Prediction is local</h3><p>The account-specific roll is implemented from public reverse-engineering code and reference test vectors. Predictions still require the internal Player ID, a true encounter ID, and the correct odds.</p></div>
         </div>
-        <div class="warning-box"><span aria-hidden="true">ⓘ</span><p><strong>No fake shiny results.</strong> This build reports source records and IDs; it will not pretend the missing prediction formula is working.</p></div>
+        <div class="warning-box"><span aria-hidden="true">ⓘ</span><p><strong>Identifier checks matter.</strong> A Friend Code is not the internal Player ID, and an ordinary spawn key is not necessarily an encounter ID. Rows without the required IDs remain unpredicted.</p></div>
       </aside>
     </section>
 

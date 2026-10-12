@@ -36,16 +36,28 @@ The `ashokvarmamatta/pkmspawn` GitHub repository claims to scrape multiple map s
 
 Repository: https://github.com/ashokvarmamatta/pkmspawn
 
-## Shiny prediction formula status
+## Shiny prediction formula — implemented
 
-Recent community discussion says the per-account shiny method uses a relationship involving trainer UUID, spawn ID and encounter ID, and that a trainer identifier can be obtained through a friend-related protocol flow. However, the actual formula, constants, canonical input encoding, and a test vector/reference implementation were not present in the public material located during this research. Therefore the webpage does not calculate or claim account-specific shiny outcomes.
+A public implementation was found in Poliswag's `modules/shiny_roll.py`, with test vectors in `tests/modules/test_shiny_roll.py`. The documented algorithm is SHA-1 over the encounter ID serialized as eight little-endian bytes followed by the game's internal Player ID as UTF-8; the first eight digest bytes seed Java's 48-bit `java.util.Random` LCG. Its first 24-bit draw is compared with the shiny odds threshold. The code includes Java/OpenJDK reference vectors and links the draw logic to Golbat PR #423.
 
-Community discussion: https://www.reddit.com/r/TheSilphRoad/comments/1x15qsx/removed/
-PogoCoordinates announcement: https://www.reddit.com/r/PoGoAndroidSpoofing/comments/1x0w54m/shiny_coords_our_pokemon_go_spawn_search_can_now/
-Eevx announcement: https://www.reddit.com/r/PoGoAndroidSpoofing/comments/1x1ce1c/eevx_now_does-guaranteed-shiny-sniping-for-your/
+Implementation reference:
+https://github.com/rubendgpedrosa/Poliswag/blob/main/modules/shiny_roll.py
+Test vectors:
+https://github.com/rubendgpedrosa/Poliswag/blob/main/tests/modules/test_shiny_roll.py
+Golbat reference project:
+https://github.com/UnownHash/Golbat
+
+The local browser module `shiny-roll.js` implements the exact byte encoding, unsigned 64-bit encounter IDs (including values larger than JavaScript's safe integer range), SHA-1, Java LCG update, and 24-bit cutoff. `node test-shiny-roll.mjs` passes reference vectors in the downloaded build.
+
+**Critical identifier distinction:** a 12-digit Friend Code is not the internal Player ID used in the calculation. The public implementation's documentation says its linker obtains the internal ID from `invited_player_ids` in a raid-lobby flow. Shiny Atlas does not implement that account-linking process; it only calculates locally when the internal ID is supplied. Similarly, arbitrary map `id` fields are not assumed to be encounter IDs: Golbat's documented record `id` is accepted, and other providers need an explicit `encounter_id` field.
+
+The UI's default odds are 1/512 and the denominator is user-configurable. Event rate detection is not implemented. Shiny release eligibility by species, form, and costume is also not yet enforced, so formula positives are candidate RNG outcomes and must be checked against the current release rules.
+
+Community announcement and discussion of account-specific shiny predictions:
+https://www.reddit.com/r/PoGoAndroidSpoofing/comments/1x0w54m/shiny_coords_our_pokemon_go_spawn_search_can_now/
 
 ## Data integrity and privacy
 
-- Trainer Code is not sent to iFlowGo, Golbat, or any JSON feed. It is validated locally and currently reserved for a future, verified prediction module.
+- The internal Player ID is only read in browser JavaScript and is not sent to iFlowGo, Golbat, or a JSON feed. Friend-Code linking is not implemented, and the 12-digit Friend Code cannot be substituted for the internal ID.
 - The Golbat API secret is read by `server.mjs` from `GOLBAT_SECRET`; do not publish it in client-side files.
-- The frontend intentionally labels all records “Prediction unavailable” unless a feed explicitly supplies an account-prediction field (`predicted_shiny`, `is_shiny_for_trainer`, `shiny_for_account`, or `account_shiny`). Generic `shiny` fields are displayed separately as source-provided metadata and are not treated as the new account-specific calculation.
+- The frontend only calculates when an internal Player ID is provided and the encounter ID is verified by source contract or an explicit `encounter_id` field. Generic `shiny` fields are displayed separately as source-provided metadata.

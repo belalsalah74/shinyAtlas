@@ -136,3 +136,6 @@ code { padding: 2px 5px; border-radius: 5px; background: #202938; color: #d3deec
   .footer { display: block; }
   .footer span { display: block; margin-bottom: 7px; }
 }
+.record-status.predicted-shiny { border-color: #8e7738; background: #3a301b; color: #ffe28e; }
+.record-status.predicted-not-shiny { border-color: #374b3b; background: #14241b; color: #b9d4c0; }
+.record-status.needs-data { border-color: #354155; background: #151d29; color: #bdc8d8; }
