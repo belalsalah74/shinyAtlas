@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0a0d12">
+  <title>Shiny Atlas — Mapper Search</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="Shiny Atlas home">
+        <span class="brand-mark" aria-hidden="true">✦</span>
+        <span>SHINY ATLAS</span>
+      </a>
+      <span class="status-pill"><span class="status-dot"></span> Mapper-ready prototype</span>
+    </header>
+
+    <section class="hero" id="top">
+      <p class="eyebrow">Live spawn data research</p>
+      <h1>Search the feed.<br><span>Verify the prediction.</span></h1>
+      <p class="lede">Connect a mapper you control, a provider JSON feed, or a local export. The page fetches and displays spawn records with their encounter and spawn IDs.</p>
+    </section>
+
+    <section class="layout">
+      <section class="panel search-panel" aria-labelledby="search-heading">
+        <div class="panel-heading">
+          <div>
+            <h2 id="search-heading">Search spawn records</h2>
+            <p class="muted">Your Trainer Code stays in this page. It is not sent to a mapper.</p>
+          </div>
+          <span class="mini-tag">No game login</span>
+        </div>
+
+        <form id="search-form">
+          <div class="field-group">
+            <label for="trainer-code">Trainer Code <span class="optional">optional for data inspection</span></label>
+            <input id="trainer-code" name="trainer-code" class="text-input" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="1234 5678 9012" aria-describedby="trainer-help">
+            <p class="field-help" id="trainer-help">Kept in memory only. Account-specific shiny calculation is not enabled because a verified public implementation has not been found.</p>
+          </div>
+
+          <div class="section-rule"><span>DATA SOURCE</span></div>
+          <div class="source-tabs" role="group" aria-label="Data source">
+            <button type="button" class="source-tab active" data-source="iflowgo" aria-pressed="true">iFlowGo feed</button>
+            <button type="button" class="source-tab" data-source="golbat" aria-pressed="false">Golbat mapper</button>
+            <button type="button" class="source-tab" data-source="feed" aria-pressed="false">JSON feed</button>
+            <button type="button" class="source-tab" data-source="file" aria-pressed="false">Local file</button>
+          </div>
+
+          <div class="source-pane" id="pane-iflowgo">
+            <div class="source-status"><span class="status-dot"></span><div><strong>iFlowGo nearby feed</strong><p>A third-party endpoint documented in a recent public Pokémon GO coordinates bot. The local server calls it so browser CORS does not block the request.</p></div></div>
+            <p class="callout">This source has been reported to return species, coordinates, expiry and a record ID. That ID is not verified to be the game's encounter ID, so it may not provide every input a shiny formula needs. Availability and provider rules can change.</p>
+          </div>
+
+          <div class="source-pane hidden" id="pane-golbat">
+            <div class="source-status"><span class="status-dot"></span><div><strong>Self-hosted Golbat API</strong><p>Uses the local proxy in <code>server.mjs</code>; the API secret remains in your server environment.</p></div></div>
+            <p class="callout">No anonymous public Golbat endpoint was found. This option requires a Golbat instance that is already receiving spawn data from a scanner.</p>
+          </div>
+
+          <div class="source-pane hidden" id="pane-feed">
+            <div class="field-group">
+              <label for="feed-url">JSON feed URL</label>
+              <input id="feed-url" class="text-input" type="url" inputmode="url" placeholder="https://your-mapper.example/api/spawns">
+              <p class="field-help">Use a feed URL from a provider you have access to. The provider must permit browser requests (CORS); this page does not bypass access controls.</p>
+            </div>
+            <div class="field-group">
+              <label for="feed-token">Optional bearer token</label>
+              <input id="feed-token" class="text-input" type="password" autocomplete="off" placeholder="Only if your provider requires it">
+              <p class="field-help">This token is sent from your browser to the URL above and is never saved by this page.</p>
+            </div>
+          </div>
+
+          <div class="source-pane hidden" id="pane-file">
+            <div class="field-group">
+              <label for="spawn-file">Spawn export (.json or .csv)</label>
+              <input id="spawn-file" class="file-input" type="file" accept=".json,.csv,application/json,text/csv">
+              <p class="field-help">A JSON array or CSV should include an encounter ID, spawn ID, Pokémon ID, coordinates, and expiry if available.</p>
+            </div>
+          </div>
+
+          <div class="section-rule"><span>SEARCH AREA</span></div>
+          <div class="fields-grid">
+            <div class="field-group">
+              <label for="latitude">Center latitude</label>
+              <input id="latitude" class="text-input" type="number" step="any" min="-90" max="90" placeholder="30.0444" required>
+            </div>
+            <div class="field-group">
+              <label for="longitude">Center longitude</label>
+              <input id="longitude" class="text-input" type="number" step="any" min="-180" max="180" placeholder="31.2357" required>
+            </div>
+            <div class="field-group">
+              <label for="radius">Radius (km)</label>
+              <input id="radius" class="text-input" type="number" min="0.1" max="25" step="0.1" value="5" required>
+            </div>
+            <div class="field-group">
+              <label for="species-id">Pokémon ID <span class="optional">optional</span></label>
+              <input id="species-id" class="text-input" type="number" min="1" max="2000" step="1" placeholder="e.g. 25">
+            </div>
+          </div>
+
+          <div class="actions">
+            <button class="primary-button" type="submit" id="search-button"><span id="button-label">Search spawn data</span><span aria-hidden="true">↗</span></button>
+            <button class="quiet-button" type="button" id="clear-button">Clear</button>
+          </div>
+          <p class="inline-status" id="form-status" aria-live="polite">Ready. Choose a data source and search area.</p>
+        </form>
+      </section>
+
+      <aside class="panel facts-panel">
+        <p class="eyebrow">What is connected</p>
+        <h2>Available data routes</h2>
+        <div class="fact-block">
+          <span class="fact-number">01</span>
+          <div><h3>iFlowGo nearby API</h3><p>Public community code calls this endpoint with a center coordinate and radius to retrieve spawn records. It is the lowest-friction source to try, but we cannot live-test it from this environment.</p><a href="https://github.com/KernelX-debug/Discord-Bot_Lucario_Moonaniphp/blob/main/iflowgo_client.py" target="_blank" rel="noopener noreferrer">Implementation reference ↗</a></div>
+        </div>
+        <div class="fact-block">
+          <span class="fact-number">02</span>
+          <div><h3>Golbat REST API</h3><p>Documented scan endpoint, protected by an API secret. We integrate the API, but do not provide a public mapper server.</p><a href="https://github.com/UnownHash/Golbat/blob/main/api.md" target="_blank" rel="noopener noreferrer">API documentation ↗</a></div>
+        </div>
+        <div class="fact-block">
+          <span class="fact-number">03</span>
+          <div><h3>Provider JSON feed</h3><p>PokeXperience advertises mapper-data JSON/webhook access with a subscription. Its feed URL is not publicly documented, so it must be supplied by the provider.</p><a href="https://pokexperience.com/" target="_blank" rel="noopener noreferrer">PokeXperience ↗</a></div>
+        </div>
+        <div class="fact-block">
+          <span class="fact-number">04</span>
+          <div><h3>Prediction is separate</h3><p>The feed must contain the right identifiers, and the account-specific formula still needs independent verification. This page never invents shiny status.</p></div>
+        </div>
+        <div class="warning-box"><span aria-hidden="true">ⓘ</span><p><strong>No fake shiny results.</strong> This build reports source records and IDs; it will not pretend the missing prediction formula is working.</p></div>
+      </aside>
+    </section>
+
+    <section class="results-section" id="results-section" aria-live="polite" hidden>
+      <div class="results-heading">
+        <div><p class="eyebrow">Mapper response</p><h2 id="results-title">Spawn records</h2></div>
+        <div class="results-stats"><span id="result-count">0 records</span><span id="result-source">No source</span></div>
+      </div>
+      <div class="results-note" id="results-note">These are raw spawn records, not account-specific shiny predictions.</div>
+      <div class="records-list" id="records-list"></div>
+      <div class="pagination-row" id="pagination-row" hidden><span id="pagination-label"></span><button type="button" class="quiet-button" id="show-more-button">Show more</button></div>
+    </section>
+
+    <footer class="footer">
+      <span>HTML · CSS · JavaScript · No third-party frontend libraries</span>
+      <span><a href="research-notes.md" target="_blank" rel="noopener noreferrer">Research notes</a> · <a href="https://www.reddit.com/r/TheSilphRoad/comments/1x15qsx/removed/" target="_blank" rel="noopener noreferrer">Community discussion</a></span>
+    </footer>
+  </main>
+</body>
+</html>
