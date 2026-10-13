@@ -8,7 +8,7 @@ const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
 const GOLBAT_URL = (process.env.GOLBAT_URL || '').trim().replace(/\/+$/, '');
 const GOLBAT_SECRET = process.env.GOLBAT_SECRET || '';
-const PLAYER_LINKER_URL = (process.env.PLAYER_LINKER_URL || '').trim().replace(/\\/+$/, '');
+const PLAYER_LINKER_URL = (process.env.PLAYER_LINKER_URL || '').trim().replace(/\/+$/, '');
 const PLAYER_LINKER_TOKEN = process.env.PLAYER_LINKER_TOKEN || '';
 const MAX_BODY_BYTES = 32 * 1024;
 
@@ -207,8 +207,8 @@ async function handleLinkTrainer(request, response) {
   try { input = await readJsonBody(request); }
   catch (error) { sendJson(response, 400, { error: error.message }); return; }
 
-  const trainerCode = String(input.trainerCode || '').replace(/\\D/g, '');
-  if (!/^\\d{12}$/.test(trainerCode)) {
+  const trainerCode = String(input.trainerCode || '').replace(/\D/g, '');
+  if (!/^\d{12}$/.test(trainerCode)) {
     sendJson(response, 400, { error: 'Trainer Code must contain exactly 12 digits.' });
     return;
   }

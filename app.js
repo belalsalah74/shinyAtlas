@@ -462,13 +462,13 @@
   }
 
   trainerCodeInput.addEventListener('input', () => {
-    const digits = trainerCodeInput.value.replace(/\\D/g, '').slice(0, 12);
-    trainerCodeInput.value = digits.replace(/(\\d{4})(?=\\d)/g, '$1 ').trim();
+    const digits = trainerCodeInput.value.replace(/\D/g, '').slice(0, 12);
+    trainerCodeInput.value = digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim();
   });
 
   linkTrainerButton.addEventListener('click', async () => {
-    const trainerCode = trainerCodeInput.value.replace(/\\D/g, '');
-    if (!/^\\d{12}$/.test(trainerCode)) {
+    const trainerCode = trainerCodeInput.value.replace(/\D/g, '');
+    if (!/^\d{12}$/.test(trainerCode)) {
       setStatus('Enter the 12-digit Trainer Code first.', 'error');
       return;
     }
