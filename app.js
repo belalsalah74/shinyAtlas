@@ -5,6 +5,7 @@
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
   const form = $('#search-form');
+  const trainerCodeInput = $('#trainer-code');
   const playerIdInput = $('#player-id');
   const shinyOddsInput = $('#shiny-odds');
   const latitudeInput = $('#latitude');
@@ -17,6 +18,7 @@
   const searchButton = $('#search-button');
   const buttonLabel = $('#button-label');
   const clearButton = $('#clear-button');
+  const linkTrainerButton = $('#link-trainer-button');
   const formStatus = $('#form-status');
   const resultsSection = $('#results-section');
   const resultsTitle = $('#results-title');
@@ -458,6 +460,40 @@
     $$('.source-pane').forEach((pane) => pane.classList.add('hidden'));
     $(`#pane-${mode}`).classList.remove('hidden');
   }
+
+  trainerCodeInput.addEventListener('input', () => {
+    const digits = trainerCodeInput.value.replace(/\\D/g, '').slice(0, 12);
+    trainerCodeInput.value = digits.replace(/(\\d{4})(?=\\d)/g, '$1 ').trim();
+  });
+
+  linkTrainerButton.addEventListener('click', async () => {
+    const trainerCode = trainerCodeInput.value.replace(/\\D/g, '');
+    if (!/^\\d{12}$/.test(trainerCode)) {
+      setStatus('Enter the 12-digit Trainer Code first.', 'error');
+      return;
+    }
+    linkTrainerButton.disabled = true;
+    linkTrainerButton.textContent = 'Resolving…';
+    setStatus('Sending the code only to your configured Player ID linker…');
+    try {
+      const response = await fetch('/api/link-trainer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trainerCode })
+      });
+      const payload = await readResponse(response);
+      const playerId = globalThis.ShinyRoll.normalizePlayerId(payload.playerId ?? payload.player_id);
+      if (!playerId) throw new Error('The linker response did not contain a valid internal Player ID. Expected playerId or player_id.');
+      playerIdInput.value = playerId;
+      const name = payload.trainerName ?? payload.trainer_name;
+      setStatus(`Linked${name ? ` trainer ${name}` : ' trainer'} successfully. Predictions will use this ID locally.`, 'success');
+    } catch (error) {
+      setStatus(error.message || 'Could not resolve the Trainer Code.', 'error');
+    } finally {
+      linkTrainerButton.disabled = false;
+      linkTrainerButton.textContent = 'Resolve ID';
+    }
+  });
 
   playerIdInput.addEventListener('input', () => {
     playerIdInput.value = playerIdInput.value.trim().toLowerCase();

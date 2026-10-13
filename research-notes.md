@@ -49,7 +49,7 @@ https://github.com/UnownHash/Golbat
 
 The local browser module `shiny-roll.js` implements the exact byte encoding, unsigned 64-bit encounter IDs (including values larger than JavaScript's safe integer range), SHA-1, Java LCG update, and 24-bit cutoff. `node test-shiny-roll.mjs` passes reference vectors in the downloaded build.
 
-**Critical identifier distinction:** a 12-digit Friend Code is not the internal Player ID used in the calculation. The public implementation's documentation says its linker obtains the internal ID from `invited_player_ids` in a raid-lobby flow. Shiny Atlas does not implement that account-linking process; it only calculates locally when the internal ID is supplied. Similarly, arbitrary map `id` fields are not assumed to be encounter IDs: Golbat's documented record `id` is accepted, and other providers need an explicit `encounter_id` field.
+**Critical identifier distinction:** a 12-digit Friend Code is not the internal Player ID used in the calculation. Public reverse-engineering notes describe resolving the internal ID through an authenticated friend/raid-related linking flow, including player IDs observed in raid-lobby invitation data. Shiny Atlas now provides a configurable adapter at `POST /api/link-trainer`; it does not implement or bundle that authenticated resolver. Similarly, arbitrary map `id` fields are not assumed to be encounter IDs: Golbat's documented record `id` is accepted, and other providers need an explicit `encounter_id` field.
 
 The UI's default odds are 1/512 and the denominator is user-configurable. Event rate detection is not implemented. Shiny release eligibility by species, form, and costume is also not yet enforced, so formula positives are candidate RNG outcomes and must be checked against the current release rules.
 
@@ -58,6 +58,6 @@ https://www.reddit.com/r/PoGoAndroidSpoofing/comments/1x0w54m/shiny_coords_our_p
 
 ## Data integrity and privacy
 
-- The internal Player ID is only read in browser JavaScript and is not sent to iFlowGo, Golbat, or a JSON feed. Friend-Code linking is not implemented, and the 12-digit Friend Code cannot be substituted for the internal ID.
+- The internal Player ID is only read in browser JavaScript and is not sent to iFlowGo, Golbat, or a JSON feed. Trainer-Code linking is only an adapter to an explicitly configured resolver; the 12-digit Friend Code cannot be substituted for the internal ID.
 - The Golbat API secret is read by `server.mjs` from `GOLBAT_SECRET`; do not publish it in client-side files.
 - The frontend only calculates when an internal Player ID is provided and the encounter ID is verified by source contract or an explicit `encounter_id` field. Generic `shiny` fields are displayed separately as source-provided metadata.

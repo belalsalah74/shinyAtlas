@@ -48,6 +48,22 @@ Upload a file exported from a mapper. Supported JSON envelopes include an array 
 
 Requires Node.js 18+ (uses native `fetch`). From this directory, run `node server.mjs`; the page will be served at `http://127.0.0.1:8787`.
 
+## Trainer Code → internal Player ID linking
+
+The UI's **Resolve ID** button is an adapter, not a built-in account resolver. The 12-digit Trainer Code is not the identifier used by the shiny-roll calculation and cannot be converted to the internal Player ID with a local formula. A resolver must use an authorized, authenticated account-linking/scanner flow and verify that the returned ID belongs to the intended trainer.
+
+Configure a resolver you control before using the button:
+
+```sh
+PLAYER_LINKER_URL="https://your-resolver.example/api/resolve-trainer" \
+PLAYER_LINKER_TOKEN="your-resolver-bearer-token" \
+node server.mjs
+```
+
+When clicked, the browser sends `POST /api/link-trainer` to the local Node server. That route forwards `{"trainerCode":"123456789012"}` only to the explicitly configured `PLAYER_LINKER_URL`, optionally with an Authorization Bearer token. The linker must return JSON containing `playerId` or `player_id`, optionally with `trainerName`/ `trainer_name`. The server validates the returned ID format before the browser fills the internal-ID field. Without a configured URL, the route returns HTTP 503 and sends the Trainer Code nowhere. The app does not bundle a real account resolver, and no live account lookup has been verified.
+
+Detailed flow, code pointers, trust boundaries, and failure cases: [Trainer ID resolution notes](TRAINER-ID-RESOLUTION.md).
+
 ## Account-specific prediction
 
 `shiny-roll.js` implements the following documented reverse-engineered flow entirely in the browser:
@@ -68,7 +84,7 @@ Run `node test-shiny-roll.mjs` to test the browser implementation against the re
 1. The iFlowGo integration is based on a recent public client but its live availability could not be tested from this environment.
 2. Golbat only returns what its own configured scanner has already collected.
 3. iFlowGo's plain `id` is treated as a source spawn key rather than an encounter ID, so those rows are not formula-scored unless an explicit `encounter_id` is also present.
-4. **Friend-Code linking is not implemented.** The internal game Player ID is a different identifier and must be resolved through a verified linking method first. The page neither sends the ID to a server nor submits a Friend Code anywhere.
+4. **Trainer Code linking requires configuration.** The adapter forwards the code only to the resolver you explicitly configure and only when you press Resolve ID. No resolver is bundled. The internal Player ID is not sent to the spawn mapper.
 5. The default shiny odds are 1/512. Set the denominator to the applicable odds for the species/encounter source/event; the app does not discover event rates automatically.
 6. The roll predicts the random shiny check; it does not yet gate predictions by the current shiny-release status of each species/form/costume. Treat results as candidate predictions until eligibility is checked.
 7. Pokémon GO and its services are third-party products. Use only data sources and tools you are authorized to access.

@@ -38,9 +38,17 @@
 
         <form id="search-form">
           <div class="field-group">
-            <label for="player-id">Internal game Player ID <span class="optional">optional for feed-only search</span></label>
+            <label for="trainer-code">Trainer Code <span class="optional">12 digits</span></label>
+            <div class="inline-input-action">
+              <input id="trainer-code" name="trainer-code" class="text-input" type="text" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="14" placeholder="1234 5678 9012" aria-describedby="trainer-code-help">
+              <button type="button" class="quiet-button" id="link-trainer-button">Resolve ID</button>
+            </div>
+            <p class="field-help" id="trainer-code-help">Linking requires a configured, authorized resolver that can retrieve the internal game Player ID. The code is not sent anywhere unless you press Resolve ID and configure PLAYER_LINKER_URL on this server.</p>
+          </div>
+          <div class="field-group">
+            <label for="player-id">Internal game Player ID <span class="optional">filled by resolver or manually</span></label>
             <input id="player-id" name="player-id" class="text-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="16-char hex or 15–24 digit ID" aria-describedby="player-id-help">
-            <p class="field-help" id="player-id-help">This is not your 12-digit Friend Code. The internal ID must first be resolved through a verified account-linking flow; this build does not link codes automatically. If entered, it stays in your browser and is used only for local calculations.</p>
+            <p class="field-help" id="player-id-help">Used only in local shiny calculations. It is not sent to the spawn mapper. The Friend Code itself cannot be used as this ID.</p>
           </div>
           <div class="field-group">
             <label for="shiny-odds">Shiny odds denominator</label>

@@ -8,6 +8,8 @@ const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
 const GOLBAT_URL = (process.env.GOLBAT_URL || '').trim().replace(/\/+$/, '');
 const GOLBAT_SECRET = process.env.GOLBAT_SECRET || '';
+const PLAYER_LINKER_URL = (process.env.PLAYER_LINKER_URL || '').trim().replace(/\\/+$/, '');
+const PLAYER_LINKER_TOKEN = process.env.PLAYER_LINKER_TOKEN || '';
 const MAX_BODY_BYTES = 32 * 1024;
 
 const MIME = {
@@ -200,6 +202,71 @@ async function handleGolbat(request, response) {
   }
 }
 
+async function handleLinkTrainer(request, response) {
+  let input;
+  try { input = await readJsonBody(request); }
+  catch (error) { sendJson(response, 400, { error: error.message }); return; }
+
+  const trainerCode = String(input.trainerCode || '').replace(/\\D/g, '');
+  if (!/^\\d{12}$/.test(trainerCode)) {
+    sendJson(response, 400, { error: 'Trainer Code must contain exactly 12 digits.' });
+    return;
+  }
+  if (!PLAYER_LINKER_URL) {
+    sendJson(response, 503, {
+      error: 'No Player ID linker is configured. Set PLAYER_LINKER_URL to a resolver you control that can look up Trainer Codes, then restart server.mjs. Shiny Atlas will not send the code to a third-party service by default.'
+    });
+    return;
+  }
+
+  let target;
+  try { target = new URL(PLAYER_LINKER_URL); }
+  catch { sendJson(response, 500, { error: 'PLAYER_LINKER_URL is not a valid URL.' }); return; }
+  if (target.protocol !== 'https:' && target.protocol !== 'http:') {
+    sendJson(response, 500, { error: 'PLAYER_LINKER_URL must use HTTP or HTTPS.' });
+    return;
+  }
+
+  try {
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    if (PLAYER_LINKER_TOKEN) headers.Authorization = `Bearer ${PLAYER_LINKER_TOKEN}`;
+    const upstream = await fetch(target, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ trainerCode }),
+      signal: AbortSignal.timeout(30000),
+      cache: 'no-store'
+    });
+    const text = await upstream.text();
+    let payload;
+    try { payload = text ? JSON.parse(text) : {}; }
+    catch { payload = { error: `Player ID linker returned non-JSON data (HTTP ${upstream.status}).`, detail: text.slice(0, 300) }; }
+    if (!upstream.ok) {
+      const message = payload.error || payload.message || `Player ID linker returned HTTP ${upstream.status}.`;
+      sendJson(response, upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502, { error: String(message) });
+      return;
+    }
+
+    const playerId = String(payload.playerId ?? payload.player_id ?? '').trim().toLowerCase();
+    if (!/^(?:[0-9a-f]{16,32}|[0-9]{15,24})$/.test(playerId)) {
+      sendJson(response, 502, { error: 'Linker did not return a valid playerId/player_id. A 12-digit Trainer Code is not a valid internal Player ID.' });
+      return;
+    }
+    sendJson(response, 200, {
+      playerId,
+      trainerName: payload.trainerName ?? payload.trainer_name ?? null,
+      status: payload.status ?? 'linked'
+    });
+  } catch (error) {
+    const isTimeout = error.name === 'TimeoutError' || error.name === 'AbortError';
+    sendJson(response, 502, {
+      error: isTimeout
+        ? 'Player ID linker timed out.'
+        : `Could not contact the configured Player ID linker: ${error.message || 'network error'}`
+    });
+  }
+}
+
 async function serveStatic(urlPath, response) {
   let decoded;
   try { decoded = decodeURIComponent(urlPath); }
@@ -229,7 +296,7 @@ async function serveStatic(urlPath, response) {
 const server = http.createServer(async (request, response) => {
   const url = new URL(request.url || '/', `http://${request.headers.host || '127.0.0.1'}`);
   if (request.method === 'GET' && url.pathname === '/health') {
-    sendJson(response, 200, { status: 'ok', golbatConfigured: Boolean(GOLBAT_URL) });
+    sendJson(response, 200, { status: 'ok', golbatConfigured: Boolean(GOLBAT_URL), playerLinkerConfigured: Boolean(PLAYER_LINKER_URL) });
     return;
   }
   if (request.method === 'POST' && url.pathname === '/api/iflowgo-nearby') {
@@ -238,6 +305,10 @@ const server = http.createServer(async (request, response) => {
   }
   if (request.method === 'POST' && url.pathname === '/api/golbat-scan') {
     await handleGolbat(request, response);
+    return;
+  }
+  if (request.method === 'POST' && url.pathname === '/api/link-trainer') {
+    await handleLinkTrainer(request, response);
     return;
   }
   if (request.method !== 'GET' && request.method !== 'HEAD') {
@@ -250,4 +321,5 @@ const server = http.createServer(async (request, response) => {
 server.listen(PORT, HOST, () => {
   console.log(`Shiny Atlas running at http://${HOST}:${PORT}`);
   console.log(`Golbat proxy: ${GOLBAT_URL ? 'configured' : 'not configured (local file/JSON feed still available)'}`);
+  console.log(`Player ID linker: ${PLAYER_LINKER_URL ? 'configured' : 'not configured (Trainer Code linking disabled)'}`);
 });

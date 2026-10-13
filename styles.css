@@ -139,3 +139,24 @@ code { padding: 2px 5px; border-radius: 5px; background: #202938; color: #d3deec
 .record-status.predicted-shiny { border-color: #8e7738; background: #3a301b; color: #ffe28e; }
 .record-status.predicted-not-shiny { border-color: #374b3b; background: #14241b; color: #b9d4c0; }
 .record-status.needs-data { border-color: #354155; background: #151d29; color: #bdc8d8; }
+
+
+/* Trainer Code + Resolve ID controls */
+.inline-input-action {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+.inline-input-action .text-input {
+  min-width: 0;
+  flex: 1;
+}
+.inline-input-action .quiet-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .inline-input-action {
+    flex-direction: column;
+  }
+}
