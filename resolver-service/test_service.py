@@ -90,6 +90,11 @@ class ResolverBridgeTests(unittest.TestCase):
     def test_allowlist_normalizes_spaces(self):
         self.assertIn("111122223333", app.allowed_codes())
 
+    def test_normal_poll_cadence_is_not_rate_limited(self):
+        client = "poll-test-" + str(uuid.uuid4())
+        for _ in range(25):
+            self.assertTrue(app.rate_allowed(client))
+
     def test_job_ids_are_uuids(self):
         valid = str(uuid.uuid4())
         self.assertTrue(app.JOB_PATH_RE.fullmatch("/api/resolve-trainer/" + valid))
