@@ -50,19 +50,17 @@ Requires Node.js 18+ (uses native `fetch`). From this directory, run `node serve
 
 ## Trainer Code → internal Player ID linking
 
-The UI's **Resolve ID** button is an adapter, not a built-in account resolver. The 12-digit Trainer Code is not the identifier used by the shiny-roll calculation and cannot be converted to the internal Player ID with a local formula. A resolver must use an authorized, authenticated account-linking/scanner flow and verify that the returned ID belongs to the intended trainer.
+The 12-digit Trainer Code is not the identifier used by the shiny-roll calculation and cannot be converted to the internal Player ID with a local formula. The companion [resolver-service](resolver-service/README.md) is a private HTTP bridge to an existing Poliswag shiny-link worker; it does not implement the game protocol and cannot resolve codes unless that scanner/linker infrastructure is already installed and running.
 
-Configure a resolver you control before using the button:
+Configure the bridge using [its README](resolver-service/README.md), including the SQL schema, API token, database permissions, and explicit Trainer Code allowlist. Then configure Shiny Atlas:
 
-```sh
-PLAYER_LINKER_URL="https://your-resolver.example/api/resolve-trainer" \
-PLAYER_LINKER_TOKEN="your-resolver-bearer-token" \
+~~~sh
+PLAYER_LINKER_URL='http://127.0.0.1:8790/api/resolve-trainer'
+PLAYER_LINKER_TOKEN='THE_SAME_LONG_RANDOM_SECRET'
 node server.mjs
-```
+~~~
 
-When clicked, the browser sends `POST /api/link-trainer` to the local Node server. That route forwards `{"trainerCode":"123456789012"}` only to the explicitly configured `PLAYER_LINKER_URL`, optionally with an Authorization Bearer token. The linker must return JSON containing `playerId` or `player_id`, optionally with `trainerName`/ `trainer_name`. The server validates the returned ID format before the browser fills the internal-ID field. Without a configured URL, the route returns HTTP 503 and sends the Trainer Code nowhere. The app does not bundle a real account resolver, and no live account lookup has been verified.
-
-Detailed flow, code pointers, trust boundaries, and failure cases: [Trainer ID resolution notes](TRAINER-ID-RESOLUTION.md).
+The loopback URL works only when Shiny Atlas and the bridge run on the same machine. Use a private HTTPS endpoint when they are on different machines. Clicking Resolve ID submits the code to the configured bridge; the app receives a job ID and polls for completion. It never sends a code if PLAYER_LINKER_URL is unset. The bridge only accepts allowlisted codes and returns the internal Player ID once the existing worker completes the lookup. No public or independently hosted resolver is included.
 
 ## Account-specific prediction
 

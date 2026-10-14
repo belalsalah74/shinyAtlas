@@ -267,6 +267,80 @@ async function handleLinkTrainer(request, response) {
   }
 }
 
+async function handleLinkTrainerStatus(response, jobId) {
+  if (!PLAYER_LINKER_URL) {
+    sendJson(response, 503, { error: 'No Player ID linker is configured.' });
+    return;
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
+    sendJson(response, 400, { error: 'Invalid resolver job ID.' });
+    return;
+  }
+
+  let target;
+  try {
+    target = new URL(PLAYER_LINKER_URL.replace(/\/+$/, '') + '/' + encodeURIComponent(jobId));
+  } catch {
+    sendJson(response, 500, { error: 'PLAYER_LINKER_URL is not a valid URL.' });
+    return;
+  }
+  if (target.protocol !== 'https:' && target.protocol !== 'http:') {
+    sendJson(response, 500, { error: 'PLAYER_LINKER_URL must use HTTP or HTTPS.' });
+    return;
+  }
+
+  try {
+    const headers = { Accept: 'application/json' };
+    if (PLAYER_LINKER_TOKEN) headers.Authorization = 'Bearer ' + PLAYER_LINKER_TOKEN;
+    const upstream = await fetch(target, {
+      method: 'GET',
+      headers,
+      signal: AbortSignal.timeout(15000),
+      cache: 'no-store'
+    });
+    const body = await upstream.text();
+    let payload;
+    try { payload = body ? JSON.parse(body) : {}; }
+    catch {
+      sendJson(response, 502, { error: 'Player ID linker returned non-JSON data (HTTP ' + upstream.status + ').' });
+      return;
+    }
+
+    if (upstream.status === 202 || payload.status === 'pending') {
+      sendJson(response, 202, {
+        jobId,
+        status: 'pending',
+        pollAfterMs: Math.max(1000, Math.min(10000, Number(payload.pollAfterMs) || 3000)),
+        message: payload.message || 'Waiting for resolver worker.'
+      });
+      return;
+    }
+    if (!upstream.ok) {
+      const message = payload.error || payload.message || ('Player ID linker returned HTTP ' + upstream.status + '.');
+      sendJson(response, upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502, { error: String(message) });
+      return;
+    }
+
+    const playerId = String(payload.playerId ?? payload.player_id ?? '').trim().toLowerCase();
+    if (!/^(?:[0-9a-f]{16,32}|[0-9]{15,24})$/.test(playerId)) {
+      sendJson(response, 502, { error: 'Linker did not return a valid internal Player ID.' });
+      return;
+    }
+    sendJson(response, 200, {
+      playerId,
+      trainerName: payload.trainerName ?? payload.trainer_name ?? null,
+      status: payload.status ?? 'linked'
+    });
+  } catch (error) {
+    const isTimeout = error.name === 'TimeoutError' || error.name === 'AbortError';
+    sendJson(response, 502, {
+      error: isTimeout
+        ? 'Could not check resolver job status in time.'
+        : 'Could not contact the configured Player ID linker: ' + (error.message || 'network error')
+    });
+  }
+}
+
 async function serveStatic(urlPath, response) {
   let decoded;
   try { decoded = decodeURIComponent(urlPath); }
@@ -309,6 +383,10 @@ const server = http.createServer(async (request, response) => {
   }
   if (request.method === 'POST' && url.pathname === '/api/link-trainer') {
     await handleLinkTrainer(request, response);
+    return;
+  }
+  if (request.method === 'GET' && url.pathname.startsWith('/api/link-trainer/')) {
+    await handleLinkTrainerStatus(response, url.pathname.slice('/api/link-trainer/'.length));
     return;
   }
   if (request.method !== 'GET' && request.method !== 'HEAD') {

@@ -476,17 +476,40 @@
     linkTrainerButton.textContent = 'Resolving…';
     setStatus('Sending the code only to your configured Player ID linker…');
     try {
-      const response = await fetch('/api/link-trainer', {
+      let response = await fetch('/api/link-trainer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trainerCode })
+        body: JSON.stringify({ trainerCode }),
+        cache: 'no-store'
       });
-      const payload = await readResponse(response);
+      let payload = await readResponse(response);
+      if (payload.status === 'pending' && payload.jobId) {
+        const jobId = String(payload.jobId);
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) {
+          throw new Error('The resolver returned an invalid job ID.');
+        }
+        const deadline = Date.now() + 20 * 60 * 1000;
+        while (payload.status === 'pending') {
+          if (Date.now() >= deadline) {
+            throw new Error('The resolver is still pending after 20 minutes. Check the scanner/linker worker before retrying.');
+          }
+          setStatus(payload.message || 'Request queued. Waiting for the scanner/linker worker…');
+          const delay = Math.max(1000, Math.min(10000, Number(payload.pollAfterMs) || 3000));
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          response = await fetch('/api/link-trainer/' + encodeURIComponent(jobId), { cache: 'no-store' });
+          payload = await readResponse(response);
+          if (response.status === 202 || payload.status === 'pending') {
+            payload.status = 'pending';
+            continue;
+          }
+          break;
+        }
+      }
       const playerId = globalThis.ShinyRoll.normalizePlayerId(payload.playerId ?? payload.player_id);
       if (!playerId) throw new Error('The linker response did not contain a valid internal Player ID. Expected playerId or player_id.');
       playerIdInput.value = playerId;
       const name = payload.trainerName ?? payload.trainer_name;
-      setStatus(`Linked${name ? ` trainer ${name}` : ' trainer'} successfully. Predictions will use this ID locally.`, 'success');
+      setStatus('Linked' + (name ? ' trainer ' + name : ' trainer') + ' successfully. Predictions will use this ID locally.', 'success');
     } catch (error) {
       setStatus(error.message || 'Could not resolve the Trainer Code.', 'error');
     } finally {
