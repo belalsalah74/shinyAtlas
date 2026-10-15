@@ -1,0 +1,8 @@
+{
+  "code": "035287579185",
+  "error": {
+    "status": 403,
+    "body": "{\"error\":\"This Trainer Code is not in the resolver allowlist.\"}"
+  },
+  "timestamp": "2026-10-15T08:49:38.769166Z"
+}

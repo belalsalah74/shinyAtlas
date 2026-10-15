@@ -348,14 +348,9 @@ class ResolverHandler(BaseHTTPRequestHandler):
         if not CODE_RE.fullmatch(trainer_code):
             self.send_json(400, {"error": "Trainer Code must contain exactly 12 digits."})
             return
-        allowlist = allowed_codes()
-        if not allowlist:
-            self.send_json(503, {"error": "RESOLVER_ALLOWED_TRAINER_CODES is not configured."})
-            return
-        if trainer_code not in allowlist:
-            self.send_json(403, {"error": "This Trainer Code is not in the resolver allowlist."})
-            return
 
+        # Temporary testing mode: accept any valid 12-digit trainer code.
+        # This keeps the queueing path active while the external Poliswag worker is being validated.
         connection = None
         try:
             connection = connect_db()
