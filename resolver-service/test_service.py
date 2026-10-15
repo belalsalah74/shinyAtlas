@@ -113,6 +113,20 @@ class ResolverBridgeTests(unittest.TestCase):
             kwargs = fake_pymysql.connect.call_args.kwargs
             self.assertEqual(kwargs["unix_socket"], "/tmp/mysql.sock")
 
+    def test_persist_job_result_writes_repo_json(self):
+        job_id = str(uuid.uuid4())
+        path = os.path.join(os.path.dirname(app.RESULT_LOG_PATH), "test_resolved_jobs.json")
+        try:
+            with mock.patch.object(app, "RESULT_LOG_PATH", path):
+                app.persist_job_result(job_id, "linked", player_id="abc123", trainer_name="Tester")
+                with open(path, "r", encoding="utf-8") as handle:
+                    records = json.load(handle)
+                self.assertTrue(records[-1]["jobId"] == job_id)
+                self.assertEqual(records[-1]["status"], "linked")
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
+
     def test_job_ids_are_uuids(self):
         valid = str(uuid.uuid4())
         self.assertTrue(app.JOB_PATH_RE.fullmatch("/api/resolve-trainer/" + valid))

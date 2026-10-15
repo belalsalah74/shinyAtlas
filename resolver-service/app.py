@@ -20,6 +20,7 @@ except ImportError:
     DictCursor = None
 
 LOG = logging.getLogger("shinyatlas-resolver")
+RESULT_LOG_PATH = os.path.join(os.path.dirname(__file__), "resolved_jobs.json")
 PLAYER_ID_RE = re.compile(r"(?:[0-9a-f]{16,32}|[0-9]{15,24})\Z")
 JOB_PATH_RE = re.compile(r"/api/resolve-trainer/([0-9a-fA-F-]{36})\Z")
 CODE_RE = re.compile(r"[0-9]{12}\Z")
@@ -28,6 +29,34 @@ RATE_LIMIT = 120
 RATE_WINDOW_SECONDS = 60
 _RATE_LOCK = threading.Lock()
 _RATE_BUCKETS = {}
+
+
+def persist_job_result(job_id, status, player_id=None, trainer_name=None, error=None):
+    payload = {
+        "jobId": job_id,
+        "status": status,
+        "playerId": player_id,
+        "trainerName": trainer_name,
+        "error": error,
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    try:
+        if os.path.exists(RESULT_LOG_PATH):
+            with open(RESULT_LOG_PATH, "r", encoding="utf-8") as handle:
+                try:
+                    entries = json.load(handle)
+                except json.JSONDecodeError:
+                    entries = []
+        else:
+            entries = []
+        if not isinstance(entries, list):
+            entries = []
+        entries.append(payload)
+        with open(RESULT_LOG_PATH, "w", encoding="utf-8") as handle:
+            json.dump(entries, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+    except Exception as exc:  # pragma: no cover - best effort logging
+        LOG.warning("Could not persist resolver result to %s: %s", RESULT_LOG_PATH, exc)
 
 
 def allowed_codes():
@@ -125,12 +154,14 @@ def resolve_db_status(job_id):
                         "updated_at=UTC_TIMESTAMP() WHERE job_id=%s",
                         ("Worker returned an invalid internal Player ID.", job_id),
                     )
+                    persist_job_result(job_id, "failed", error="Worker returned an invalid internal Player ID.")
                 else:
                     cursor.execute(
                         "UPDATE shinyatlas_resolver_jobs SET status='linked', player_id=%s, "
                         "trainer_name=%s, error=NULL, updated_at=UTC_TIMESTAMP() WHERE job_id=%s",
                         (player_id, str(source.get("trainer_name") or "")[:32] or None, job_id),
                     )
+                    persist_job_result(job_id, "linked", player_id=player_id, trainer_name=str(source.get("trainer_name") or "")[:32] or None)
                 cursor.execute("DELETE FROM shiny_link WHERE discord_id=%s",
                                (job["synthetic_discord_id"],))
             elif source["status"] == "failed":
@@ -140,6 +171,7 @@ def resolve_db_status(job_id):
                     "updated_at=UTC_TIMESTAMP() WHERE job_id=%s",
                     (reason, job_id),
                 )
+                persist_job_result(job_id, "failed", error=reason)
                 cursor.execute("DELETE FROM shiny_link WHERE discord_id=%s",
                                (job["synthetic_discord_id"],))
 
