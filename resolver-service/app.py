@@ -42,19 +42,38 @@ def connect_db():
     missing = [key for key in required if key not in os.environ]
     if missing:
         raise RuntimeError("Missing Poliswag DB environment variables: " + ", ".join(missing))
-    return pymysql.connect(
-        host=os.environ.get("SHINY_LINKER_DB_HOST", os.environ.get("DB_HOST", "127.0.0.1")),
-        port=int(os.environ.get("DB_PORT", "3306")),
-        user=os.environ["DB_USER"],
-        password=os.environ["DB_PASSWORD"],
-        database=os.environ["DB_POLISWAG"],
-        charset="utf8mb4",
-        connect_timeout=5,
-        read_timeout=15,
-        write_timeout=15,
-        autocommit=False,
-        cursorclass=DictCursor,
-    )
+
+    host = os.environ.get("SHINY_LINKER_DB_HOST", os.environ.get("DB_HOST", "127.0.0.1"))
+    unix_socket = os.environ.get("DB_UNIX_SOCKET") or os.environ.get("MYSQL_UNIX_SOCKET")
+    if not unix_socket and host in {"localhost", "127.0.0.1"}:
+        for candidate in (
+            "/run/user/1000/akonadi/mysql.socket",
+            "/run/mysqld/mysqld.sock",
+            "/var/run/mysqld/mysqld.sock",
+        ):
+            if os.path.exists(candidate):
+                unix_socket = candidate
+                break
+
+    connect_kwargs = {
+        "host": host,
+        "port": int(os.environ.get("DB_PORT", "3306")),
+        "user": os.environ["DB_USER"],
+        "password": os.environ["DB_PASSWORD"],
+        "database": os.environ["DB_POLISWAG"],
+        "charset": "utf8mb4",
+        "connect_timeout": 5,
+        "read_timeout": 15,
+        "write_timeout": 15,
+        "autocommit": False,
+        "cursorclass": DictCursor,
+    }
+    if unix_socket:
+        connect_kwargs["host"] = "localhost"
+        connect_kwargs["unix_socket"] = unix_socket
+        connect_kwargs.pop("port", None)
+
+    return pymysql.connect(**connect_kwargs)
 
 
 def rate_allowed(client_key):

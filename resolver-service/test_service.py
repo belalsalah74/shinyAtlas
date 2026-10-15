@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 import uuid
 from http.server import ThreadingHTTPServer
+from unittest import mock
 
 import app
 
@@ -94,6 +95,23 @@ class ResolverBridgeTests(unittest.TestCase):
         client = "poll-test-" + str(uuid.uuid4())
         for _ in range(25):
             self.assertTrue(app.rate_allowed(client))
+
+    def test_connect_db_uses_unix_socket_when_configured(self):
+        with mock.patch.object(app, "pymysql") as fake_pymysql:
+            fake_pymysql.connect.return_value = object()
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "DB_USER": "belal",
+                    "DB_PASSWORD": "",
+                    "DB_POLISWAG": "poliswag",
+                    "DB_UNIX_SOCKET": "/tmp/mysql.sock",
+                },
+                clear=False,
+            ):
+                app.connect_db()
+            kwargs = fake_pymysql.connect.call_args.kwargs
+            self.assertEqual(kwargs["unix_socket"], "/tmp/mysql.sock")
 
     def test_job_ids_are_uuids(self):
         valid = str(uuid.uuid4())
