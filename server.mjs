@@ -128,7 +128,7 @@ async function handleIFlowGo(request, response) {
     const upstream = await fetch(endpoint, {
       method: 'GET',
       headers: { 'Accept': 'application/json', 'User-Agent': 'ShinyAtlasMapperResearch/1.0' },
-      signal: AbortSignal.timeout(18000)
+      signal: AbortSignal.timeout(10000)
     });
     const raw = await upstream.text();
     let payload;

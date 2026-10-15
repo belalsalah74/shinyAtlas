@@ -292,6 +292,9 @@
     const text = await response.text();
     let payload;
     try { payload = text ? JSON.parse(text) : {}; } catch {
+      if (response.status === 504) {
+        throw new Error('HTTP 504 Gateway Timeout. GitHub Pages cannot run the Shiny Atlas API; deploy the Node server using render.yaml. If using the deployed server, check its logs to see whether the host or iFlowGo timed out.');
+      }
       throw new Error(`The server returned non-JSON content (HTTP ${response.status}). Check the endpoint URL.`);
     }
     if (!response.ok) {
