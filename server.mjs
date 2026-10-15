@@ -115,7 +115,8 @@ async function handleIFlowGo(request, response) {
     lon: String(lon),
     radius_km: String(radiusKm),
     layers: 'spawns',
-    limit: String(Math.max(1, Math.min(800, Math.trunc(Number(input.limit) || 800))))
+    min_iv: '0',
+    limit: String(Math.max(1, Math.min(200, Math.trunc(Number(input.limit) || 200))))
   });
   if (input.speciesId !== null && input.speciesId !== undefined && input.speciesId !== '') {
     try { query.set('pokemon_id', String(Math.trunc(clampNumber(input.speciesId, 1, 2000, 'Pokémon ID')))); }
@@ -132,8 +133,20 @@ async function handleIFlowGo(request, response) {
     const raw = await upstream.text();
     let payload;
     try { payload = raw ? JSON.parse(raw) : {}; }
-    catch { payload = { error: `iFlowGo returned non-JSON data (HTTP ${upstream.status}).`, detail: raw.slice(0, 500) }; }
-    response.writeHead(upstream.status, {
+    catch { payload = { error: `iFlowGo returned non-JSON data (HTTP ${upstream.status}).`, detail: raw.slice(0, 300) }; }
+    if (!upstream.ok) {
+      const statusCode = [400, 401, 403, 404, 429].includes(upstream.status) ? upstream.status : 502;
+      sendJson(response, statusCode, {
+        error: upstream.status === 504
+          ? 'The iFlowGo feed timed out (upstream HTTP 504). The Shiny Atlas server is reachable, but the provider did not finish this search.'
+          : upstream.status >= 500
+            ? `The iFlowGo feed is temporarily unavailable (upstream HTTP ${upstream.status}). Retry with a smaller radius or later.`
+            : payload.error || payload.message || `iFlowGo returned HTTP ${upstream.status}.`,
+        upstreamStatus: upstream.status
+      });
+      return;
+    }
+    response.writeHead(200, {
       'Content-Type': 'application/json; charset=utf-8',
       'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff'

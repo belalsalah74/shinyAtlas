@@ -8,8 +8,7 @@
   const trainerCodeInput = $('#trainer-code');
   const playerIdInput = $('#player-id');
   const shinyOddsInput = $('#shiny-odds');
-  const latitudeInput = $('#latitude');
-  const longitudeInput = $('#longitude');
+  const coordinatesInput = $('#search-coordinates');
   const radiusInput = $('#radius');
   const speciesInput = $('#species-id');
   const feedUrlInput = $('#feed-url');
@@ -168,19 +167,58 @@
     return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
   }
 
-  function validateSearchArea() {
-    const latitude = Number(latitudeInput.value);
-    const longitude = Number(longitudeInput.value);
+  function getCurrentCoordinates() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('This browser does not support location access. Enter coordinates as latitude,longitude instead.'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        }),
+        (error) => {
+          const reason = error.code === 1
+            ? 'Location permission was denied.'
+            : error.code === 2
+              ? 'Your current location is unavailable.'
+              : 'Getting your current location timed out.';
+          reject(new Error(reason + ' Allow location access or enter coordinates as latitude,longitude.'));
+        },
+        { enableHighAccuracy: false, timeout: 12000, maximumAge: 60000 }
+      );
+    });
+  }
+
+  async function validateSearchArea() {
+    const coordinateText = coordinatesInput.value.trim();
     const radius = Number(radiusInput.value);
     const speciesRaw = speciesInput.value.trim();
     const speciesId = speciesRaw ? Number(speciesRaw) : null;
+    let latitude;
+    let longitude;
 
-    if (!latitudeInput.value.trim() || !longitudeInput.value.trim() || !Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
-      throw new Error('Enter a valid center latitude from -90 to 90.');
+    if (coordinateText) {
+      const parts = coordinateText.split(',').map((part) => part.trim());
+      if (parts.length !== 2 || !parts[0] || !parts[1]) {
+        throw new Error('Coordinates must use one field in latitude,longitude format, for example 25.038252,121.566607.');
+      }
+      latitude = Number(parts[0]);
+      longitude = Number(parts[1]);
+      if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+        throw new Error('Latitude must be a number from -90 to 90. Use latitude,longitude format.');
+      }
+      if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+        throw new Error('Longitude must be a number from -180 to 180. Use latitude,longitude format.');
+      }
+    } else {
+      setStatus('Getting your current location…');
+      const current = await getCurrentCoordinates();
+      latitude = current.latitude;
+      longitude = current.longitude;
     }
-    if (!longitudeInput.value.trim() || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
-      throw new Error('Enter a valid center longitude from -180 to 180.');
-    }
+
     if (!Number.isFinite(radius) || radius < 0.1 || radius > 25) {
       throw new Error('Radius must be between 0.1 and 25 km.');
     }
@@ -191,18 +229,30 @@
   }
 
   async function fetchIFlowGo(area) {
-    const response = await fetch('/api/iflowgo-nearby', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        latitude: area.latitude,
-        longitude: area.longitude,
-        radiusKm: area.radius,
-        speciesId: area.speciesId,
-        limit: 800
-      })
-    });
+    let response;
+    try {
+      response = await fetch('/api/iflowgo-nearby', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          latitude: area.latitude,
+          longitude: area.longitude,
+          radiusKm: area.radius,
+          speciesId: area.speciesId,
+          limit: 200
+        }),
+        cache: 'no-store'
+      });
+    } catch {
+      throw new Error('Could not reach the Shiny Atlas API backend. Deploy and run server.mjs; a static GitHub Pages site cannot run this API route.');
+    }
+    if (response.status === 404 || response.status === 405) {
+      throw new Error('The Shiny Atlas API backend is not available at this address. GitHub Pages only hosts static files; deploy the Node server using render.yaml and search the deployed app URL.');
+    }
     const payload = await readResponse(response);
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      throw new Error(payload.error || 'The iFlowGo upstream feed is temporarily unavailable. Try a smaller radius or retry later.');
+    }
     return { rows: extractRows(payload), label: 'iFlowGo nearby' };
   }
 
@@ -410,7 +460,7 @@
   async function search(event) {
     event?.preventDefault();
     try {
-      const area = validateSearchArea();
+      const area = await validateSearchArea();
       const rawPlayerId = playerIdInput.value.trim();
       if (rawPlayerId && !ShinyRoll.normalizePlayerId(rawPlayerId)) throw new Error('Internal Player ID format is invalid. A 12-digit Friend Code is not accepted by the formula.');
       const odds = Number(shinyOddsInput.value);

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: shiny-atlas
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0

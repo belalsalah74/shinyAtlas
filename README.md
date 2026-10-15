@@ -4,6 +4,13 @@ A split-file frontend for inspecting Pokémon GO spawn records from a mapper. Fi
 
 **The page retrieves spawn data and includes a local account-specific shiny-roll predictor.** The predictor follows a public reverse-engineered SHA-1 + Java `Random` implementation and is tested against published reference vectors. It still requires an internal game Player ID and a verified numeric encounter ID; a 12-digit Friend Code cannot be used directly.
 
+## Location and deployment
+
+Search area defaults to the device's current location when the coordinates field is left blank. You can override it using one field in `latitude,longitude` format, for example `25.038252,121.566607`. Browser location permission is required when the field is blank.
+
+**Important:** GitHub Pages only serves static files; it cannot run the `/api/iflowgo-nearby` Node endpoint. Deploy the full app as a Node web service using the included [render.yaml](render.yaml), then open the deployed service URL (not the GitHub Pages URL). The service calls iFlowGo from the server. If the provider itself returns HTTP 504, Shiny Atlas now reports that as an upstream timeout rather than implying the search succeeded; provider availability cannot be guaranteed by this repository.
+
+
 ## Data sources
 
 ### 1. iFlowGo nearby feed — available to try without your own mapper
