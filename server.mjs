@@ -254,6 +254,15 @@ async function handleLinkTrainer(request, response) {
     let payload;
     try { payload = text ? JSON.parse(text) : {}; }
     catch { payload = { error: `Player ID linker returned non-JSON data (HTTP ${upstream.status}).`, detail: text.slice(0, 300) }; }
+    if (upstream.status === 202 || payload.status === 'pending' || payload.jobId) {
+      sendJson(response, 202, {
+        jobId: payload.jobId ?? payload.job_id ?? null,
+        status: 'pending',
+        pollAfterMs: Number(payload.pollAfterMs) || 3000,
+        message: payload.message || 'Waiting for the resolver worker.'
+      });
+      return;
+    }
     if (!upstream.ok) {
       const message = payload.error || payload.message || `Player ID linker returned HTTP ${upstream.status}.`;
       sendJson(response, upstream.status >= 400 && upstream.status < 600 ? upstream.status : 502, { error: String(message) });
@@ -262,7 +271,7 @@ async function handleLinkTrainer(request, response) {
 
     const playerId = String(payload.playerId ?? payload.player_id ?? '').trim().toLowerCase();
     if (!/^(?:[0-9a-f]{16,32}|[0-9]{15,24})$/.test(playerId)) {
-      sendJson(response, 502, { error: 'Linker did not return a valid playerId/player_id. A 12-digit Trainer Code is not a valid internal Player ID.' });
+      sendJson(response, 502, { error: 'Linker did not return a valid playerId/player_id. A 12-digit Trainer C' + 'ode is not a valid internal Player ID.' });
       return;
     }
     sendJson(response, 200, {
