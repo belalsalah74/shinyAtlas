@@ -60,8 +60,21 @@ def persist_job_result(job_id, status, player_id=None, trainer_name=None, error=
 
 
 def allowed_codes():
-    raw = os.environ.get("RESOLVER_ALLOWED_TRAINER_CODES", "")
+    raw = os.environ.get("RESOLVER_ALLOWED_TRAINER_CODES", "").strip()
+    if not raw or raw.lower() in {"*", "any", "all"}:
+        return set()
     return {re.sub(r"\D", "", part) for part in raw.split(",") if re.sub(r"\D", "", part)}
+
+
+def allowlist_enabled():
+    raw = os.environ.get("RESOLVER_ALLOWED_TRAINER_CODES", "").strip()
+    return bool(raw) and raw.lower() not in {"*", "any", "all"}
+
+
+def is_allowlisted(trainer_code):
+    if not allowlist_enabled():
+        return True
+    return trainer_code in allowed_codes()
 
 
 def connect_db():
@@ -280,18 +293,19 @@ class ResolverHandler(BaseHTTPRequestHandler):
             try:
                 connection = connect_db()
                 connection.close()
-                ready = bool(os.environ.get("RESOLVER_API_TOKEN")) and bool(allowed_codes())
+                allowlist_configured = allowlist_enabled()
+                ready = bool(os.environ.get("RESOLVER_API_TOKEN")) and (not allowlist_configured or bool(allowed_codes()))
                 self.send_json(200 if ready else 503, {
                     "status": "ok" if ready else "not_configured",
                     "databaseConnected": True,
-                    "allowlistConfigured": bool(allowed_codes()),
+                    "allowlistConfigured": allowlist_configured,
                     "apiTokenConfigured": bool(os.environ.get("RESOLVER_API_TOKEN")),
                 })
             except Exception:
                 self.send_json(503, {
                     "status": "not_ready",
                     "databaseConnected": False,
-                    "allowlistConfigured": bool(allowed_codes()),
+                    "allowlistConfigured": allowlist_enabled(),
                     "apiTokenConfigured": bool(os.environ.get("RESOLVER_API_TOKEN")),
                 })
             return
@@ -348,9 +362,13 @@ class ResolverHandler(BaseHTTPRequestHandler):
         if not CODE_RE.fullmatch(trainer_code):
             self.send_json(400, {"error": "Trainer Code must contain exactly 12 digits."})
             return
+        if allowlist_enabled() and not is_allowlisted(trainer_code):
+            self.send_json(403, {
+                "error": "Trainer Code is not allowlisted for this resolver service.",
+                "status": "forbidden",
+            })
+            return
 
-        # Temporary testing mode: accept any valid 12-digit trainer code.
-        # This keeps the queueing path active while the external Poliswag worker is being validated.
         connection = None
         try:
             connection = connect_db()

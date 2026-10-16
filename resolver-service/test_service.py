@@ -91,6 +91,12 @@ class ResolverBridgeTests(unittest.TestCase):
     def test_allowlist_normalizes_spaces(self):
         self.assertIn("111122223333", app.allowed_codes())
 
+    def test_empty_allowlist_allows_any_valid_code(self):
+        with mock.patch.dict(os.environ, {"RESOLVER_ALLOWED_TRAINER_CODES": ""}, clear=False):
+            self.assertTrue(app.is_allowlisted("999900001111"))
+        with mock.patch.dict(os.environ, {"RESOLVER_ALLOWED_TRAINER_CODES": "ANY"}, clear=False):
+            self.assertTrue(app.is_allowlisted("999900001111"))
+
     def test_normal_poll_cadence_is_not_rate_limited(self):
         client = "poll-test-" + str(uuid.uuid4())
         for _ in range(25):
