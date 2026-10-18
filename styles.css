@@ -53,6 +53,25 @@ label { display: block; margin: 0 0 7px; color: #d9e0ec; font-size: 12px; font-w
 .text-input:focus, .file-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #bdf76e1b; }
 .text-input::placeholder { color: #687489; }
 .field-help { margin: 6px 0 0; color: var(--muted-dim); font-size: 11px; line-height: 1.5; }
+
+.consent-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 10px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+.consent-checkbox input {
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+.consent-checkbox span { display: block; }
 .section-rule { display: flex; align-items: center; gap: 12px; margin: 23px 0 13px; color: #8f9bb0; font-size: 10px; font-weight: 900; letter-spacing: .16em; }
 .section-rule::after { content: ""; height: 1px; flex: 1; background: var(--line); }
 .source-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 13px; }
