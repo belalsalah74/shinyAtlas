@@ -62,12 +62,15 @@ The resolver path is now wired to the **in-house local service** in [shiny-atlas
 The Python service is expected at `http://127.0.0.1:8788/api/resolve`. Run Shiny Atlas and the resolver on the same machine:
 
 ```sh
-# Terminal 1: run Shiny Atlas
+# Generate one secret. Put the exact same value in both terminals.
+python -c 'import secrets; print(secrets.token_urlsafe(32))'
+
+# Terminal 1: run Shiny Atlas with the shared secret in its environment
+export PLAYER_LINKER_TOKEN='PASTE_THE_GENERATED_SECRET'
 node server.mjs
 
-# Terminal 2: configure the resolver
-export SHINY_ATLAS_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-export PLAYER_LINKER_TOKEN="$SHINY_ATLAS_API_TOKEN"
+# Terminal 2: run the resolver with the same secret and explicit allowlist
+export SHINY_ATLAS_API_TOKEN='PASTE_THE_GENERATED_SECRET'
 export SHINY_ATLAS_ALLOWED_CODES="REPLACE_WITH_12_DIGIT_CODE"
 export SHINY_ATLAS_SESSION_FACTORY="your_local_adapter:create_session"
 python -m scanner_service.server
