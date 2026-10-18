@@ -8,8 +8,8 @@ const HOST = process.env.HOST || '127.0.0.1';
 const PORT = Number(process.env.PORT || 8787);
 const GOLBAT_URL = (process.env.GOLBAT_URL || '').trim().replace(/\/+$/, '');
 const GOLBAT_SECRET = process.env.GOLBAT_SECRET || '';
-const PLAYER_LINKER_URL = (process.env.PLAYER_LINKER_URL || '').trim().replace(/\/+$/, '');
-const PLAYER_LINKER_TOKEN = process.env.PLAYER_LINKER_TOKEN || '';
+const PLAYER_LINKER_URL = (process.env.PLAYER_LINKER_URL || 'http://127.0.0.1:8788/api/resolve').trim().replace(/\/+$/, '');
+const PLAYER_LINKER_TOKEN = process.env.PLAYER_LINKER_TOKEN || process.env.SHINY_ATLAS_API_TOKEN || '';
 const MAX_BODY_BYTES = 32 * 1024;
 
 const MIME = {
@@ -225,18 +225,21 @@ async function handleLinkTrainer(request, response) {
     sendJson(response, 400, { error: 'Trainer Code must contain exactly 12 digits.' });
     return;
   }
+  const consentRef = String(input.consentRef || '').trim();
+  if (!/^ui-consent:[0-9]{10,16}$/.test(consentRef)) {
+    sendJson(response, 400, { error: 'Confirm account ownership or the trainer’s explicit permission before resolving.' });
+    return;
+  }
   if (!PLAYER_LINKER_URL) {
-    sendJson(response, 503, {
-      error: 'No Player ID linker is configured. Set PLAYER_LINKER_URL to a resolver you control that can look up Trainer Codes, then restart server.mjs. Shiny Atlas will not send the code to a third-party service by default.'
-    });
+    sendJson(response, 503, { error: 'The in-house resolver is not configured.' });
     return;
   }
 
   let target;
   try { target = new URL(PLAYER_LINKER_URL); }
   catch { sendJson(response, 500, { error: 'PLAYER_LINKER_URL is not a valid URL.' }); return; }
-  if (target.protocol !== 'https:' && target.protocol !== 'http:') {
-    sendJson(response, 500, { error: 'PLAYER_LINKER_URL must use HTTP or HTTPS.' });
+  if (target.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]', '::1'].includes(target.hostname)) {
+    sendJson(response, 500, { error: 'This build only permits the in-house loopback resolver; external resolver URLs are disabled.' });
     return;
   }
 
@@ -246,7 +249,7 @@ async function handleLinkTrainer(request, response) {
     const upstream = await fetch(target, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ trainerCode }),
+      body: JSON.stringify({ trainerCode, consentRef }),
       signal: AbortSignal.timeout(30000),
       cache: 'no-store'
     });
@@ -306,8 +309,8 @@ async function handleLinkTrainerStatus(response, jobId) {
     sendJson(response, 500, { error: 'PLAYER_LINKER_URL is not a valid URL.' });
     return;
   }
-  if (target.protocol !== 'https:' && target.protocol !== 'http:') {
-    sendJson(response, 500, { error: 'PLAYER_LINKER_URL must use HTTP or HTTPS.' });
+  if (target.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]', '::1'].includes(target.hostname)) {
+    sendJson(response, 500, { error: 'This build only permits the in-house loopback resolver.' });
     return;
   }
 
@@ -421,5 +424,5 @@ const server = http.createServer(async (request, response) => {
 server.listen(PORT, HOST, () => {
   console.log(`Shiny Atlas running at http://${HOST}:${PORT}`);
   console.log(`Golbat proxy: ${GOLBAT_URL ? 'configured' : 'not configured (local file/JSON feed still available)'}`);
-  console.log(`Player ID linker: ${PLAYER_LINKER_URL ? 'configured' : 'not configured (Trainer Code linking disabled)'}`);
+  console.log(`In-house Player ID resolver: ${PLAYER_LINKER_URL || 'not configured'} (loopback only)`);
 });
