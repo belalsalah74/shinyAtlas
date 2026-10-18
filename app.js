@@ -18,6 +18,7 @@
   const buttonLabel = $('#button-label');
   const clearButton = $('#clear-button');
   const linkTrainerButton = $('#link-trainer-button');
+  const resolveConsent = $('#resolve-consent');
   const formStatus = $('#form-status');
   const resultsSection = $('#results-section');
   const resultsTitle = $('#results-title');
@@ -525,14 +526,18 @@
       setStatus('Enter the 12-digit Trainer Code first.', 'error');
       return;
     }
+    if (!resolveConsent?.checked) {
+      setStatus('Confirm that you own this account or have the trainer’s explicit permission.', 'error');
+      return;
+    }
     linkTrainerButton.disabled = true;
     linkTrainerButton.textContent = 'Resolving…';
-    setStatus('Sending the code only to your configured Player ID linker…');
+    setStatus('Using the in-house resolver through the local game session…');
     try {
       let response = await fetch('/api/link-trainer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trainerCode }),
+        body: JSON.stringify({ trainerCode, consentRef: 'ui-consent:' + Date.now() }),
         cache: 'no-store'
       });
       let payload = await readResponse(response);
