@@ -57,17 +57,25 @@ Requires Node.js 18+ (uses native `fetch`). From this directory, run `node serve
 
 ## Trainer Code → internal Player ID linking
 
-The 12-digit Trainer Code is not the identifier used by the shiny-roll calculation and cannot be converted to the internal Player ID with a local formula. The companion [resolver-service](resolver-service/README.md) is a private HTTP bridge to an existing Poliswag shiny-link worker; it does not implement the game protocol and cannot resolve codes unless that scanner/linker infrastructure is already installed and running.
+The resolver path is now wired to the **in-house local service** in [shiny-atlas-scanner](https://github.com/belalsalah74/shiny-atlas-scanner). This build intentionally refuses remote linker URLs. Trainer Codes are sent only when you press **Resolve ID** and check the consent confirmation.
 
-Configure the bridge using [its README](resolver-service/README.md), including the SQL schema, API token, database permissions, and explicit Trainer Code allowlist. Then configure Shiny Atlas:
+The Python service is expected at `http://127.0.0.1:8788/api/resolve`. Run Shiny Atlas and the resolver on the same machine:
 
-~~~sh
-PLAYER_LINKER_URL='http://127.0.0.1:8790/api/resolve-trainer'
-PLAYER_LINKER_TOKEN='THE_SAME_LONG_RANDOM_SECRET'
+```sh
+# Terminal 1: run Shiny Atlas
 node server.mjs
-~~~
 
-The loopback URL works only when Shiny Atlas and the bridge run on the same machine. Use a private HTTPS endpoint when they are on different machines. Clicking Resolve ID submits the code to the configured bridge; the app receives a job ID and polls for completion. It never sends a code if PLAYER_LINKER_URL is unset. The bridge only accepts allowlisted codes and returns the internal Player ID once the existing worker completes the lookup. No public or independently hosted resolver is included.
+# Terminal 2: configure the resolver
+export SHINY_ATLAS_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+export PLAYER_LINKER_TOKEN="$SHINY_ATLAS_API_TOKEN"
+export SHINY_ATLAS_ALLOWED_CODES="REPLACE_WITH_12_DIGIT_CODE"
+export SHINY_ATLAS_SESSION_FACTORY="your_local_adapter:create_session"
+python -m scanner_service.server
+```
+
+Run the Python service from the `shiny-atlas-scanner` repository's root, with its Python dependencies installed. The allowlist should contain only your own Trainer Code or codes whose owners have given explicit permission. Never commit tokens or session credentials.
+
+**Live status:** the protobuf parsing, game-map raid selection, friend-search → lobby-invite ID correlation, loopback API, and mock tests are implemented. The actual authenticated game-session transport adapter referenced by `SHINY_ATLAS_SESSION_FACTORY` is still missing and must be implemented and tested on the target Pokémon GO version. Until then the service deliberately returns `not_configured`; no fake Player ID is returned. The service has no CEA/Poliswag resolver dependency and does not query a mapper to discover the Player ID.
 
 ## Account-specific prediction
 
